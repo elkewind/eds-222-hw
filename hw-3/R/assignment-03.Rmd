@@ -1,0 +1,180 @@
+---
+title: "EDS 222: Assignment 03 (due: Nov 1, 9am)"
+author: "Elke Windschitl"
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load all the packages needed here
+library(tidyverse)
+library(readr)
+library(gt)
+library(tufte)
+
+# Set your filepath here! Or, set this up as an .Rproj if you'd like.
+datadir <- ("/Users/elkewindschitl/Documents/MEDS/eds-222/data/HW3") 
+```
+
+# Question 1: Some math with Ordinary Least Squares
+
+We will rely on `R` to implement all the heavy lifting of OLS, but it's essential that you understand what is happening beneath the hood of canned linear regression commands so that you can accurately design, execute, and interpret regressions. These questions ask you to probe the algebra of least squares so that you can see some of the mechanics behind `lm()` and other linear regression packages in `R` and beyond.
+
+Consider a simple linear regression model:
+
+$$y_i = \beta_0 + \beta_1 x_i + u_i$$ Recall the definitions of the OLS estimate of the intercept and slope coefficients:
+
+$$\hat{\beta}_1 = \dfrac{\sum_i (x_i - \overline{x})(y_i - \overline{y})}{\sum_i (x_i - \overline{x})^2} = \frac{cov(x,y)}{var(x)}$$
+
+$$ \hat{\beta}_0 = \overline{y} - \hat{\beta}_1 \overline{x} $$Using these definitions, show mathematically how $\hat\beta_0$ and $\hat\beta_1$ change under the following scenarios.[^1] Give some intuition for your answers. If your answers differ across scenarios, why do they? If not, why not?
+
+[^1]: Note that these kinds of scenarios occur in practice all the time when we change units of measurement.
+
+-   Scenario 1: all observations of the independent variable are multiplied by 3
+
+-   **(I made a reprex to better understand these)**
+
+-   **B0 would stay the same because when x = 0, the extra 3 doesn't impact the equation, and either way we get B0 = y-0.**
+
+-   $$ \hat{\beta}_0 = \overline{y} - 3*\hat{\beta}_1 \overline{x} $$
+
+-   **B1 would decrease by 1/3 because the denominator would increase when x (independent variable) is multiplied by three**
+
+-   $$\hat{\beta}_1 = \dfrac{\sum_i (3*x_i - \overline{3*x})(y_i - \overline{y})}{\sum_i (3*x_i - \overline{3*x})^2}$$
+
+-   Scenario 2: all observations of the dependent variable are multiplied by 3
+
+-   **B0 would increase times 3 (if positive) because y (dependent variable) is increasing and shifting the line up --- if y is negative then B0 would decrease times 3**
+
+-   $$ \hat{\beta}_0 = 3*
+    \overline{y} - \hat{\beta}_1 \overline{x} $$
+
+-   **B1 would increase 3 times because the numerator is increasing when y (dependent variable) is increasing**
+
+-   $$\hat{\beta}_1 = \dfrac{\sum_i (x_i - \overline{x})(3*y_i - \overline{3*y})}{\sum_i (x_i - \overline{x})^2} $$
+
+-   Scenario 3: All observations of both the independent and dependent variables are multiplied by 3
+
+-   **B0 would increase by 3 (assuming positive value) because multiplying x by three wouldn't change anything but multiplying y by three increases B0 by three.**
+
+-   $$ \hat{\beta}_0 = 3*\overline{y} - 3*\hat{\beta}_1 \overline{x} $$
+
+-   **B1 would stay the same because increasing by 9 (3\*3) in the numerator and denominator would cancel each other out.**
+
+-   $$\hat{\beta}_1 = \dfrac{\sum_i (3*x_i - \overline{3*x})(3*y_i - \overline{3*y})}{\sum_i (3*x_i - \overline{3*x})^2} $$
+
+# Question 2: Forest fires and temperature
+
+The data provided for this assignment, called `forestfires.rds`, is a dataset of daily forest fire area burned in the northeast region of Portugal and meteorological conditions on the recorded day (data was constructed from [here](http://www3.dsi.uminho.pt/pcortez/forestfires/)). The goal of assembling this dataset was to evaluate if weather conditions, such as temperature and air humidity, can predict area burned and inform fire management decisions. Each observation is a daily observation of forest fire are burned and set of associated daily weather variables, all of which are detailed in the provided README.txt file.
+
+The original documentation of the dataset can be found in [Cortez and Morais, 2007](http://www3.dsi.uminho.pt/pcortez/fires.pdf). For more information on the other variables from the Fire Weather Index (FWI), please see [here](https://www.nwcg.gov/publications/pms437/cffdrs/fire-weather-index-system#TOC-FWI-Fuel-Moisture-Codes).
+
+## Question 2.1
+
+In this homework, we are interested in the relationship between temperature and area burned.
+
+-   To begin to understand this relationship, make a scatter plot showing area burned ($y$-axis) as it relates to temperature ($x$-axis) and discuss the general relationship. Do you see a positive or negative correlation? Does that make intuitive sense to you? How strong does the correlation appear to be?
+-   **The general relationship appears to be that as temperature increases, area burned also burns -- this is a positive correlation. This is intuitive to me because we usually see fire in hotter months. The correlation appears to be moderate to me. There is a decent amount of variability, but I would say there is a clear trend.**
+
+```{r}
+# Read in data
+dat <- read_rds(file.path(datadir, "forestfires.rds"))
+
+# PLot scatter plot
+ggplot(dat, aes(x = temp, y = area)) +
+  geom_point()
+```
+
+## Question 2.2
+
+Use the `lm()` command to estimate the following simple linear regression:
+
+$$ \text{area_burned}_i = \beta_0 + \beta_1 \text{temp}_i + \varepsilon_i $$ Display your estimated intercept and slope coefficients using `summary()`, `gt()`, or `kable()`. Interpret each coefficient in words, and then answer the following:
+
+**B0 = When temperature equals zero degrees C, the expected area burned is 14.8 hectares**
+
+**B1 = For every one degree increase in temperature, the expected measure of hectares burned increases by 12.3.**
+
+-   How many hectares do you predict will be burned on a day that is 1 degrees Celsius?
+-   **27.0 Hectares ( 12.2568 \* 1 + 14.7769)**
+-   How many hectares do you predict will be burned on a day that is 28 degrees Celsius?
+-   **357.0 Hectares (12.2568 \* 28 + 14.7769)**
+-   How many more hectares do you predict will be burned on a day in winter at 12 degrees Celsius as compared to a hot summer day at 30 degrees Celsius?
+-   **I would expect 250.2 fewer hectares be burned in the winter day than the summer day (12.2568 \* 30 + 14.7769 -12.2568 \* 12 + 14.7769)**
+
+```{r}
+mod <- lm(area~temp, dat)
+summary(mod)
+```
+
+## Question 2.3
+
+The `area` variable covers a range of zero to 1371.923 (units: hectares). Based on the math you showed in Question 1, how do you expect your coefficients to change if you rescale this variable to acres (one hectare is about 2.47 acres)?
+
+**B0 would increase by a scale of 2.47. B1 would increase by a scale of 2.47.**
+
+Implement this rescaling and show your new coefficients. Does your math align with your new coefficients?
+
+**Yes, the new coefficients match what I expected with my math.**
+
+```{r}
+mod_acres <- lm((area * 2.47) ~ temp, dat)
+summary(mod_acres)
+```
+
+## Question 2.4
+
+Using your original regression model with the original `temp` variable, use `geom_smooth()` in `ggplot()` to visualize your regression line, overlaid on your scatter plot. Use `se=FALSE` to suppress standard errors; we will dig into those soon!
+
+How well do you think your model is fitting the data?
+
+**The model seems to be fitting the data well, it is pretty much what I would expect, but there are a couple of outliers.**
+
+```{r}
+ggplot(dat, aes(x = temp, y = area)) +
+  geom_point() +
+  geom_smooth(data = broom::augment(mod), aes(y=.fitted), se = FALSE)
+```
+
+Compute the coefficient of determination ($R^2$), or report it based on the regression results you saved above. What percent of variation in area burned are explained by temperature? Does this align with your intuition based on the scatter plot?
+
+**The** $R^2$ **value is 0.28. I would've expected it to be a bit higher, but definitely not above 0.5, so this value isn't too far off my expectation.**
+
+```{r}
+summary(mod)
+```
+
+## Question 2.5
+
+Due to complex climatological phenomena, days with high temperatures tend to coincide with days that are also different in other dimensions. For example, hot days tend to be less rainy, with lower wind, and of higher or lower humidity, depending on the geographic location. This raises the concern of **omitted variables bias**, as these variables may also be correlated with area burned.
+
+To address this concern, add relative humidity (`RH`) as an independent variable to your linear regression model, in addition to temperature. Display your estimated intercept and slope coefficients using `summary()`, `gt()`, or `kable()`. Interpret your slope coefficient on temperature in words.
+
+New equation: $$ \text{area_burned}_i = \beta_0 + \beta_1 \text{temp}_i + \beta_2 \text{humidity}_i +\varepsilon_i $$
+
+**My B1 (slope coefficient on temp) interpretation: For every one degree C increase in temperature, the expected area burned increases by 12.9 hectares when humidity is held constant.**
+
+-   Why is your coefficient similar or different from the estimate you recovered above in the simple linear regression?
+-   **My B1 is very similar here as it was above probably because temperature and humidity correlate and there is not omitted variables bias.**
+-   Is there evidence of omitted variables bias.?
+-   **It doesn't appear that there is much omitted variables bias given that my temperature coefficient didn't change much.**
+
+**Answer:**
+
+```{r}
+mod_humid <- lm(area ~ temp + RH, data = dat)
+summary(mod_humid)
+
+mod2 <- lm(RH ~ temp, data = dat)
+ggplot(dat, aes(x = temp, y = RH)) +
+  geom_point() +
+  geom_smooth(data = broom::augment(mod2), aes(y=.fitted), se = FALSE)
+```

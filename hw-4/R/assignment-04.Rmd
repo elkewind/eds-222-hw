@@ -1,0 +1,293 @@
+---
+title: "EDS 222: Assignment 04 (due: Nov 23, 5pm)"
+author: "{STUDENT NAME}"
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load all the packages needed here
+library(tidyverse)
+library(readr)
+library(gt)
+library(tufte)
+library(feasts)
+
+# Set your filepath here! Or, set this up as an .Rproj if you'd like.
+# rootdir <- ("~/Dropbox/Teaching/UCSB/EDS_222/EDS222_data")
+# setwd(file.path(rootdir,"homework","HW4"))
+```
+
+# Question 1: Frosty
+
+In this question we will consider differences in climate conditions across the U.S. states, and conduct a simple hypothesis test.
+
+## Question 1.1
+
+Load the "US State Facts and Figures" dataset called `state.x77`, which is pre-loaded in `R` and contains a variety of statistics for each state. We will be using the `Frost` variable, which contains the mean number of days with minimum temperature below freezing (mean over the years 1931-1960).
+
+Additionally, load the `state.region` dataset, which tells you the region (South, West, Northeast, North Central) that each of the 50 U.S. states falls into. Append these two datasets together (e.g., using `add_column()` from `dplyr`) so that you have one dataset containing the variables in `state.x77` as well as the region for each state.
+
+```{r}
+us_frost <- as.data.frame(state.x77) %>% select("Frost")
+regions <- as.vector(state.region)
+
+states_frost <- us_frost %>% add_column(region = regions)
+```
+
+Compute the mean and standard deviation of the number of days below freezing in each region. Report these summary statistics in a table.[^1] Which region has the highest variance in number of frost days?
+
+[^1]: No need to format the table nicely, just print out your summary stats.
+
+**The West had the highest variance in the number of frost days with a standard deviation of 68.9.**
+
+```{r}
+frost_regions <- states_frost %>% 
+  group_by(region) %>% 
+  summarise(mean = mean(Frost), sd = sd(Frost), count = n())
+frost_regions
+```
+
+## Question 1.2
+
+Is the mean number of frost days different in the North Central region than in the South? To answer this **by hand**, do the following:[^2]
+
+[^2]: Hint: See lab 7 for help!
+
+a.  State your null and alternative hypotheses $$H_0: \mu_{North Central} - \mu_{South}=0$$ $$H_A: \mu_{North Central} - \mu_{South} \neq 0$$
+
+b.  Compute a point estimate of your parameter of interest
+
+    ```{r}
+    mu_north_central = frost_regions %>% 
+      filter(region == "North Central") %>% 
+      select(mean)
+
+    mu_south = frost_regions %>% 
+      filter(region == "South") %>% 
+      select(mean)
+
+    point_est = as.numeric(mu_north_central - mu_south)
+    print(point_est)
+    ```
+
+c.  Compute your standard error and test statistic[^3]
+
+    ```{r}
+    n1 = states_frost %>% filter(region == "North Central") %>% count()
+    n2 = states_frost %>% filter(region == "South") %>% count()
+    s1 = states_frost %>% filter(region == "North Central") %>% summarize(sd(Frost, na.rm = TRUE))
+    s2 = states_frost %>% filter(region == "South") %>% summarize(sd(Frost, na.rm = TRUE))
+    SE = as.numeric(sqrt(s1^2/n1 + s2^2/n2))
+    print(SE)
+
+    zscore = (point_est - 0)/SE
+    print(zscore)
+    ```
+
+d.  Use `pt()` with 26 degrees of freedom[^4] to compute the *p*-value
+
+    ```{r}
+    p_val <- 2 * pt(q = zscore, df = 26, lower.tail = FALSE)
+    print(p_val)
+    ```
+
+e.  Report whether you reject or fail to reject your null hypothesis at a significance level of $\alpha=0.05$
+
+[^3]: Recall that the standard error for a difference in means is defined as: $SE = \sqrt{\frac{s_1^2}{n_1} + \frac{s^2_2}{n_2}}$ and the test-statistic for a hypothesis test is $z = \frac{\text{point estimate - null}}{SE}$
+
+[^4]: Hint: Recall that `pt()` works just like `pnorm()`, but for the *t*-distribution instead of the normal distribution. Given our small sample size, we should use the *t*-distribution. The "degrees of freedom" is the parameter determining the shape of the *t* distribution. The degrees of freedom can be derived for a *t*-test with two groups with two different variances using the [Welch-Satterthwaite equation](https://en.wikipedia.org/wiki/Welch%E2%80%93Satterthwaite_equation). Don't bother calculating it, trust me it's *approximately* 26 for these data.
+
+**I reject the null hypothesis that** $$ \mu_{North Central} - \mu_{South}=0$$ **because my p-value of 1.49e-7 is well below my significance level of 0.05. There appears to be a statistically significant difference in the mean number of frost days in the North Central region compared to the South.**
+
+## Question 1.3
+
+Use your standard error to compute a 95% confidence interval around your point estimate. Interpret this confidence interval in words.
+
+**"There is a 95% probability that [53.76 ,94.66] contains the difference in mean number of frost days between states in the South verses states in the North Central region."**
+
+```{r}
+crit_val = qnorm(0.025, lower.tail=FALSE)
+ci_lower = round(point_est - crit_val*SE, 2)
+ci_upper = round(point_est + crit_val*SE, 2)
+print(paste0("There is a 95% probability that [", ci_lower, " ,", ci_upper, "] contains the difference in mean number of frost days between states in the South verses states in the North Central region."))
+```
+
+## Question 1.4
+
+Repeat the hypothesis test in Question 1.2, this time using the function `t.test()` in `R`. Does this canned function lead you to the same conclusion as your manual calculation? Are there any differences in results? Why or why not?
+
+**Yes, the p-value from the canned function (1.49e-7) is the same as the p-value calculated above. There was a slight difference before rounding, but it was very small. My guess for the difference is there is something slightly different going on "under the hood" in the function t.test than when we calculated by hand and used pt(). This could be a difference in rounding or calculating the degrees of freedom (since we provided the degrees of freedom in the first calculation).**
+
+```{r}
+two_regions <- states_frost %>% 
+  filter(region %in% c("North Central","South"))
+t.test(Frost ~ region, data = two_regions)
+```
+
+# Question 1.5
+
+Prior evidence strongly suggests that the average number of frost days should be higher in the North Central region than in the South. Above, you conducted a two-tailed *t*-test with an alternative hypothesis that the difference in means across the two regions was not equal to zero.
+
+Here, conduct a one-tailed *t*-test using `t.test()` following an alternative hypothesis that reflects this prior evidence. What is your new *p*-value? Why did it change in this way?
+
+**My new p-value is 7.47e-08. It got smaller (halved) because we are now looking at whether North Central frost mean was LARGER than South, not just different than. The area under the curve we are looking at is now half that as before because we are only looking at the right tail, not the left tail.**
+
+```{r}
+t.test(Frost ~ region, data = two_regions, alternative = "greater")
+```
+
+# Question 2: Evironmental determinants of crime
+
+There is a large and growing body of evidence that environmental conditions influence crime.[^5] While researchers are still working to unpack the mechanisms between this link, hypothesized channels include impacts of temperature on emotion control, impacts of temperature and rainfall on economic activity, and impacts of a range of climate conditions on social interactions. In this problem, you will use the same data from Question 1 to investigate the link between murder rates and climate conditions across the United States.
+
+[^5]: A review of this literature can be found [here](https://www.annualreviews.org/doi/abs/10.1146/annurev-economics-080614-115430).
+
+## Question 2.1
+
+To investigate the crime-climate link, run a simple linear regression of murder rate per 100,000 (contained in the `Murder` variable in the `state.x77` dataset) on the average number of frost days.
+
+a.  Interpret the intercept and slope coefficients in words, paying close attention to units.[^6]
+
+    **B0 shows that when the average number of frost days is zero, there is a murder rate of 11.37 out of 100,000 people. B1 shows that with every extra day of frost, the predicted murder rate decreases by 0.038 murders per 100,000 people.**
+
+b.  Is there a statistically significant relationship between frost days on murder rates? At what significance level is this effect significant?
+
+    **Yes, there is a statistically significant relationship between frost days on murder rate. Our p-value here is 0.000054, so this would be still be significant at a significance level of** α=0.0001.
+
+c.  If you save your `lm` as a new object, you can access coefficients and standard errors in the `coefficients` list.[^7] Use these coefficients and standard errors to construct a 95% confidence interval for your slope coefficient. Interpret this confidence interval in words.
+
+    **There is a 95% probability that [-0.055 ,-0.021] contains the rate of change of number of frost days on murder rate.**
+
+d.  Now, construct a 90% confidence interval. How is the answer different than in the previous question? Why?
+
+    **There is a 90% probability that [-0.052 ,-0.024] contains the rate of change of number of frost days on murder rate. The range got smaller because range is directly related to confidence. High confidences have large ranges. If we were 100 % confident, we would need a large range. By trimming down our range, we become less confident.**
+
+[^6]: Use `?state.x77` to get more information about all the variables contained in this dataset.
+
+[^7]: For example, if I saved my `lm` object as `model`, I could access coefficients and standard errors using `model$coefficients`. To access point estimates, you can use `model$coefficients[,"Estimate"]` and to access standard errors, you can use `model$coefficients[,"Std. Error"]`.
+
+```{r}
+# Select for columns of interest
+murder_frost <- as.data.frame(state.x77) %>% 
+  select("Murder", "Frost")
+
+# Run a simple linear regression and plot the data for understanding
+mod <- lm(Murder ~ Frost, data = murder_frost)
+summary(mod)
+plot(murder_frost$Frost, murder_frost$Murder)
+
+# Call the coefficients
+ses <- as.data.frame(sqrt(diag(vcov(mod)))) # Couldn't figure out `coefficients()` so using this instead -- I was working in the visual editor and missed the hint above, but this method seems to be working, so I am going to roll with it.
+int_se <- ses[1,1]
+slope_se <- ses[2,1]
+int <- mod$coefficients[1]
+slope <- mod$coefficients[2]
+
+# Construct confidence interval manually
+# Find critical value for 95% confidence
+crit_val <- qnorm(0.025, lower.tail = FALSE)
+crit_val
+ci_lower <- round(slope - crit_val*slope_se, 3)
+ci_upper <- round(slope + crit_val*slope_se, 3)
+
+print(paste0("95% probability that [", ci_lower, " ,", ci_upper, "] contains the rate of change of number of frost days on murder rate"))
+
+# Find critical value for 90% confidence
+crit_val <- qnorm(0.05, lower.tail = FALSE)
+crit_val
+ci_lower <- round(slope - crit_val*slope_se, 3)
+ci_upper <- round(slope + crit_val*slope_se, 3)
+
+print(paste0("90% probability that [", ci_lower, " ,", ci_upper, "] contains the rate of change of number of frost days on murder rate"))
+```
+
+# Question 3: Lung disease in the UK
+
+Here we are interested in the time series behavior of deaths from lung diseases in the UK. We believe it's likely that lung disease deaths have declined over time, as smoking has declined in prevalence and medical treatments for lung disease have improved. However, we also know that there is likely to be seasonality in these deaths, because respiratory diseases tend to be exacerbated by climatic conditions (e.g., see [here](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5819585/)). We want to pull apart this seasonal signal from the longer run trend.
+
+## Question 3.1
+
+First, load the `mdeaths` dataset in `R`, which contains a time series of monthly deaths from bronchitis, emphysema and asthma in the UK between 1974 and 1979 for males only. Convert this to a `tsibble` so that it's easier to work with various time series functions in `R`.
+
+Then, make a simple time series plot. Do you see any visual evidence of a long-run trend? Any visual evidence of seasonality?
+
+**I don't see strong evidence of a trend at first glance. The valleys seem to be getting lower through the years, but that could just be noise. There definitely does seem to be seasonality. There are peaks in winter months and valleys in summer months.**
+
+```{r}
+monthly_deaths <- as_tsibble(mdeaths) %>% 
+  rename(months = index)
+monthly_deaths$months <- as.Date(monthly_deaths$months)
+
+ ggplot(monthly_deaths, aes(x = months, y = value)) +
+   geom_line() +
+  labs(x = "Time",
+       y = "Deaths",
+       title = "Monthly male deaths from lung disease",
+       subtitle = "UK 1974-1979")
+```
+
+## Question 3.2
+
+To recover seasonality separately from the long run trend, we will use a classical decomposition. That is, we wish to decompose total deaths $D_t$ into a trend component $T_t$, a seasonal component $S_t$, and a random component $R_t$. We will assume an additive model describes our data, as we don't see evidence in the above plot that the magnitude of seasonality is changing over time:
+
+$$D_t = S_t + T_t + R_t$$
+
+We could use moving averages to recover each of these components...**or** we could do this a lot more quickly using the `classical_decomposition()` function in the `feasts` package.[^8]
+
+[^8]: Note: If `install.packages("feasts")` doesn't work for your version of `R`, try the development version from GitHub using `remotes::install_github("tidyverts/feasts")`.
+
+Using this function with `autoplot()`, following the code in the time series lecture notes, make a plot which shows the time series in the raw data, the long run trend, the seasonal component, and the remainder random component.
+
+a.  Is there any evidence of a long-run downward trend over time?
+
+    **Yes, we do see evidence of a small overall downward trend over time as seen in the trend plot.**
+
+b.  Is there any evidence of seasonality?
+
+    **Yes, we do see evidence of seasonality as seen the the seasonal plot.**
+
+c.  The grey bars on the side of the decomposition plot are there to help you assess how "big" each component is. Since the *y*-axes vary across each plot, it's hard to compare the magnitude of a trend or a seasonal cycle across plots without these grey bars. All grey bars are of the same magnitude; here, about 250. Thus, when the bar is small relative to the variation shown in a plot, that means that component is quantitatively important in determining overall variation. Based on the size of the bars, is the long-run trend or the seasonal component more important in driving overall variation in male lung disease deaths?
+
+    **Based on the size of the bars, the seasonal component is much more important in driving overall variation in male lung disease deaths. We cans see this from the small gray bar in the seasonal plot in comparison to the large gray bar in the trend plot.**
+
+```{r}
+decomp = as_tsibble(mdeaths) %>%
+  model(classical_decomposition(value, type = "additive")) %>% 
+  components() %>% 
+  autoplot() +
+  labs(title = "Classical additive decomposition",
+       subtitle = "of monthly male lung deaths in the UK")
+decomp
+```
+
+## Question 3.3
+
+The decomposition above shows substantial seasonality in male lung disease deaths. To more precisely assess the nature of this seasonality, here I have estimated and plotted an autocorrelation function with a maximum of 12 lags (because we think the seasonality is likely occurring within the 12 month annual window of time).
+
+```{r}
+ukts = as_tsibble(mdeaths)
+acf(ukts, lag.max = 12)
+```
+
+Reading off the plot above, answer the following:
+
+a.  Is there a correlation between month $t$ and month $t-2$? Is it positive or negative? Is that correlation statistically significant at the 95% level?
+
+    **Yes, there appears to be a significant (at 95% level) positive correlation between t and t-2 because the t-2 line is positive and above the blue dotted line.**
+
+b.  What about the correlation between month $t$ and month $t-6$? What is the intuitive reason for the sign of this correlation?
+
+    **There appears to be a strong, significant, negative correlation between t and t-6 as we can see the t-6 line is large and negative. The intuitive reason for the sign of this correlation is that people get sick more in the winter and less in the summer, and deaths follow that trend.**
+
+c.  Which month lags are statistically **insignificant**?
+
+    **t-3 and t-9 are statistically insignificant. We can tell because they are within the blue lines.**
